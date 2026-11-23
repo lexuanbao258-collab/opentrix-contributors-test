@@ -63,6 +63,8 @@ global_rules:
 upstreams:
   - id: backend
     type: roundrobin
+    # Never let the gateway re-send a request on its own.
+    retries: 0
     nodes:
       "127.0.0.1:8080": 1
 #END
