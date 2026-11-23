@@ -63,6 +63,12 @@ global_rules:
 upstreams:
   - id: backend
     type: roundrobin
+    # An upstream timeout leaves the result of a write uncertain.
+    retries: 0
+    timeout:
+      connect: 2
+      send: 10
+      read: 15
     nodes:
       "127.0.0.1:8080": 1
 #END
