@@ -704,13 +704,23 @@ class R24ReleaseTests(unittest.TestCase):
         self.put("infra/demo/demo-up.sh", "#!/usr/bin/env bash\necho demo\n")
         self.put("backend/gradlew", "#!/bin/sh\necho gradle\n")
         self.put("backend/gradle/wrapper/gradle-wrapper.jar", b"wrapper-binary")
+        self.put("scripts/not-executable.sh", "#!/bin/sh\necho no\n")
         for name in ("infra/demo/demo-up.sh", "backend/gradlew"):
             os.chmod(self.repo / name, 0o755)
         subprocess.run(["git", "init", "-q"], cwd=self.repo, check=True)
         subprocess.run(["git", "add", "README.md", "LICENSE", "NOTICE",
                         "CHANGELOG.md", "infra/demo/demo-up.sh", "backend/gradlew",
+                        "scripts/not-executable.sh",
                         "backend/gradle/wrapper/gradle-wrapper.jar"], cwd=self.repo,
                        check=True)
+        # The Git index is the portable source of executable metadata. Windows has no POSIX
+        # execute bit and Git there defaults to core.filemode=false, so chmod alone records
+        # 100644; set the index mode explicitly, as a Windows contributor must.
+        subprocess.run(["git", "update-index", "--chmod=+x", "infra/demo/demo-up.sh",
+                        "backend/gradlew"], cwd=self.repo, check=True)
+        # A shebang script that is not executable in the index must stay non-executable.
+        subprocess.run(["git", "update-index", "--chmod=-x", "scripts/not-executable.sh"],
+                       cwd=self.repo, check=True)
         self.commit_sources()
         self.make("source-only")
         root = "dxos-" + TAG + "/"
@@ -718,14 +728,19 @@ class R24ReleaseTests(unittest.TestCase):
             self.assertEqual(tf.getmember(root + "source/backend/gradlew").mode, 0o755)
             self.assertEqual(tf.getmember(root + "source/infra/demo/demo-up.sh").mode, 0o755)
             self.assertEqual(tf.getmember(root + "source/README.md").mode, 0o644)
+            self.assertEqual(tf.getmember(root + "source/scripts/not-executable.sh").mode, 0o644)
             self.assertNotIn(root + "source/backend/gradle/wrapper/gradle-wrapper.jar",
                              tf.getnames())
             target = self.repo / "extracted"
             target.mkdir()
             tf.extractall(target)
         self.assertFalse((target / root / "source/.git").exists())
+        # Meaningful on POSIX only: Windows os.access(X_OK) is true for any existing file, so
+        # there the member modes asserted above are the executable-metadata evidence.
         self.assertTrue(os.access(target / root / "source/backend/gradlew", os.X_OK))
         self.assertTrue(os.access(target / root / "source/infra/demo/demo-up.sh", os.X_OK))
+        if os.name == "posix":
+            self.assertFalse(os.access(target / root / "source/scripts/not-executable.sh", os.X_OK))
         self.assertEqual(release.verify(self.archive, self.sums)[0]["mode"], "source-only")
 
     def test_source_integrity_rejects_wrong_sha_dirty_and_staged_inputs(self):
