@@ -80,6 +80,61 @@ jobs:
           path: backend/build/reports/tests/
           retention-days: 7
 
+  # The backend job has no PostgreSQL, so this suite skips there. This job runs it against a
+  # throwaway PostgreSQL 17 service (V1-V4 plus the unapproved V5 candidate in a fresh schema)
+  # and fails if the suite is skipped. It never touches a shared or production database.
+  workflow-policy-postgres:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17.11-alpine
+        env:
+          POSTGRES_USER: helpdesk_test
+          POSTGRES_DB: helpdesk_disposable_test
+          # Not a secret: the service container exists only for this job.
+          POSTGRES_PASSWORD: ci-disposable-only
+        ports:
+          - 127.0.0.1:55439:5432
+        options: >-
+          --tmpfs /var/lib/postgresql/data
+          --health-cmd "pg_isready -U helpdesk_test -d helpdesk_disposable_test"
+          --health-interval 2s --health-timeout 5s --health-retries 30
+    env:
+      HELPDESK_DISPOSABLE_URL: jdbc:postgresql://127.0.0.1:55439/helpdesk_disposable_test
+      HELPDESK_DISPOSABLE_PASSWORD: ci-disposable-only
+      WORKFLOW_EVENT_GUARD_LOCAL_DISPOSABLE: 'true'
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+      - name: Authorized Workflow store on real PostgreSQL
+        run: >-
+          ./gradlew test --no-daemon --stacktrace --rerun-tasks
+          --tests 'com.tricore.dxos.infrastructure.workflow.AuthorizedWorkflowStorePostgresTest'
+      - name: Confirm the PostgreSQL suite executed without skips
+        run: |
+          python3 - <<'PY'
+          import pathlib
+          import xml.etree.ElementTree as ET
+          matches = list(pathlib.Path("build/test-results/test").glob(
+              "TEST-*.AuthorizedWorkflowStorePostgresTest.xml"))
+          assert len(matches) == 1, matches
+          suite = ET.parse(matches[0]).getroot()
+          values = {key: int(suite.attrib.get(key, "0"))
+                    for key in ("tests", "failures", "errors", "skipped")}
+          assert values["tests"] > 0 and all(
+              values[k] == 0 for k in ("failures", "errors", "skipped")
+          ), values
+          print("AUTHORIZED_WORKFLOW_POSTGRES_PASS", values)
+          PY
+
   portal-bff:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
