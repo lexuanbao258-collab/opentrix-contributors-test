@@ -483,7 +483,7 @@ def package(repo, tag, sha, output, mode="binary", validation_only=False):
                     info.uname = info.gname = ""
                     tf.addfile(info, io.BytesIO(contents))
     (output / "SHA256SUMS").write_text(f"{digest(archive.read_bytes())}  {archive.name}\n")
-    (output / "RELEASE-NOTES.md").write_text(notes, encoding="utf-8")
+    (output / "RELEASE-NOTES.md").write_bytes(files[prefix + "RELEASE-NOTES.md"])
     verify(archive, output / "SHA256SUMS")
     print(f"R24_CANDIDATE_BUILT {archive.name}: {len(files)} files, {len(inventory)} distribution PENDING")
 
