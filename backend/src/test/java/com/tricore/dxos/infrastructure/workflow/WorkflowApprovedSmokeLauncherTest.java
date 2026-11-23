@@ -46,9 +46,10 @@ class WorkflowApprovedSmokeLauncherTest {
         String source = Files.readString(Path.of("../scripts/workflow-approved-smoke.ps1"));
         assertThat(source.split("    Assert-WarpIpv6\\r?\\n", -1)).hasSize(2);
         // Only this disposable launcher fixture replaces network and interactive input.
-        source = source.replaceAll("    Assert-WarpIpv6\\r?\\n", "    # fixture network check\\n")
+        source = source.replaceAll("    Assert-WarpIpv6\\r?\\n", "    # fixture network check\n")
                 .replace("Read-Host 'Supabase postgres password (hidden)' -AsSecureString",
                         "ConvertTo-SecureString 'private-unit-password' -AsPlainText -Force");
+        assertThat(source).contains("    # fixture network check\n    $phase = 'secure_password_input'");
         Files.writeString(scripts.resolve("workflow-approved-smoke.ps1"), source);
         var ca = Files.writeString(temporary.resolve("ca.pem"), "fixture only");
         String zero = "0".repeat(64), one = "1".repeat(64);
@@ -108,6 +109,7 @@ class WorkflowApprovedSmokeLauncherTest {
     }
 
     private static void clear(ProcessBuilder builder) {
+        WindowsPowerShellChildTest.isolate(builder);
         builder.environment().keySet().removeIf(k -> k.startsWith("DB_") || k.startsWith("WORKFLOW_") || k.equals("WF25_DISPOSABLE_TEST"));
     }
 

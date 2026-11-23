@@ -78,8 +78,8 @@ class WorkflowSecurityDefinerReviewLauncherTest {
         Path output = temporary.resolve("output.txt");
         var arguments = new ArrayList<>(List.of("powershell.exe", "-NoProfile", "-NonInteractive", "-File", launcher.toString()));
         arguments.addAll(Arrays.asList(options));
-        var process = new ProcessBuilder(arguments)
-                .directory(temporary.toFile()).redirectErrorStream(true).redirectOutput(output.toFile());
+        var process = WindowsPowerShellChildTest.isolate(new ProcessBuilder(arguments)
+                .directory(temporary.toFile()).redirectErrorStream(true).redirectOutput(output.toFile()));
         process.environment().putAll(Map.of("DB_HOST", "aws-0-fixture.pooler.supabase.com", "DB_PORT", "5432",
                 "DB_NAME", "postgres", "DB_USER", "postgres.fixture-ref", "DB_PASSWORD", "fixture-password",
                 "PGSSLROOTCERT", "fixture.pem", "LOCALAPPDATA", temporary.resolve("local-data").toString(),
